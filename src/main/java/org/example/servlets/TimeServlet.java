@@ -12,25 +12,30 @@ import org.thymeleaf.context.Context;
 import org.thymeleaf.templateresolver.FileTemplateResolver;
 
 import java.io.IOException;
-import java.time.OffsetDateTime;
+import java.time.LocalDateTime;
 import java.time.ZoneId;
 import java.time.format.DateTimeFormatter;
+import java.util.Collections;
+import java.util.HashMap;
+import java.util.Map;
+import java.util.Optional;
 
 
 @WebServlet("/time")
 public class TimeServlet extends HttpServlet {
-    private static final String LAST_TIMEZONE = "lastTimezone";
-    private static final String REAL_PATH_TO_FILE = "/WEB-INF/templates/";
+    private static final String COOKIE_LAST_TIMEZONE = "lastTimezone";
+    private static final int COOKIE_AGE = 30;
+    private static final String REAL_PATH_TO_TEMPLATES = "/WEB-INF/templates/";
     private static final String DATA_TIME_FORMAT = "yyyy-MM-dd HH:mm:ss";
     private static final String UTC = "UTC";
-    private transient TemplateEngine engine;
+    private TemplateEngine engine;
 
     @Override
     public void init() throws ServletException {
         super.init();
         engine = new TemplateEngine();
         FileTemplateResolver resolver = new FileTemplateResolver();
-        resolver.setPrefix(getServletContext().getRealPath(REAL_PATH_TO_FILE));
+        resolver.setPrefix(getServletContext().getRealPath(REAL_PATH_TO_TEMPLATES));
         resolver.setSuffix(".html");
         resolver.setTemplateMode("HTML5");
         resolver.setOrder(engine.getTemplateResolvers().size());
@@ -41,42 +46,42 @@ public class TimeServlet extends HttpServlet {
     @Override
     protected void doGet(HttpServletRequest req, HttpServletResponse resp) throws ServletException, IOException {
         resp.setContentType("text/html; charset=utf-8");
-        try {
-            String timezone = req.getParameter("timezone");
-            timezone = lastCookies(req, timezone);
-            ZoneId zoneId = ZoneId.of((timezone != null && !timezone.isEmpty()) ? timezone : UTC);
-            Cookie cookie = new Cookie(LAST_TIMEZONE, timezone != null ? timezone : UTC);
-            cookie.setMaxAge(2880);
+            Cookie cookie = new Cookie(COOKIE_LAST_TIMEZONE, getQuery(req));
+            cookie.setMaxAge(COOKIE_AGE);
             resp.addCookie(cookie);
-            String currentTime = OffsetDateTime.now(zoneId).format(DateTimeFormatter.ofPattern(DATA_TIME_FORMAT));
+            String currentTime = getResponse(req);
             Context context = new Context();
-            context.setVariable("currentTime", currentTime);
-            context.setVariable(UTC, zoneId.getId());
+            context.setVariable("current_time", currentTime);
+            context.setVariable("time_format", getQuery(req));
             engine.process("time", context, resp.getWriter());
-            resp.addCookie(new Cookie(LAST_TIMEZONE, UTC));
+            resp.addCookie(new Cookie(COOKIE_LAST_TIMEZONE, getQuery(req)));
             resp.getWriter().close();
-        } catch (IOException ex) {
-            ex.printStackTrace();
-            resp.setStatus(HttpServletResponse.SC_INTERNAL_SERVER_ERROR);
-            resp.getWriter().write("Internal Server Error!");
+    }
+    private String getResponse(HttpServletRequest req) {
+        return  LocalDateTime.now(ZoneId.of(getQuery(req)))
+                .format(DateTimeFormatter
+                .ofPattern(DATA_TIME_FORMAT));
+    }
+
+    private String getQuery(HttpServletRequest req) {
+        Optional<String> optionalQuery = Optional.ofNullable(req.getParameter("timezone"));
+        return optionalQuery.orElseGet(() -> getCookies(req).getOrDefault(COOKIE_LAST_TIMEZONE,UTC));
+    }
+    private Map<String, String> getCookies(HttpServletRequest req) {
+        Cookie[] cookies = req.getCookies();
+        if (cookies == null) {
+            return Collections.emptyMap();
         }
+        Map<String, String> result = new HashMap<>();
+        for (Cookie cookie : cookies) {
+            result.put(cookie.getName(), cookie.getValue());
+        }
+        return result;
     }
 
     @Override
     public void destroy() {
         engine = null;
         super.destroy();
-    }
-    private static String lastCookies(HttpServletRequest req, String timezone) {
-        Cookie[] cookies = req.getCookies();
-        if (cookies != null) {
-            for (Cookie cookie : cookies) {
-                if (LAST_TIMEZONE.equals(cookie.getName())) {
-                    timezone = cookie.getValue();
-                    break;
-                }
-            }
-        }
-        return timezone;
     }
 }

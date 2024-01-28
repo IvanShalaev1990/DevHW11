@@ -8,19 +8,22 @@
     <title>Timezone</title>
     <style>
         body {
-            text-align: center;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            height: 100vh;
+            margin: 0;
         }
-
-        h2 {
-            margin-top: 50px;
+        h1 {
+            text-align: center;
+            font-size: 52px;
         }
     </style>
 </head>
 <body>
 <h1>
-    Time now: <span th:text="${currentTime}"></span>
-    <span th:text="${UTC}"></span>
-    <hr>
+    Current time is: <span th:text="${current_time}"></span>
+    <span th:text="${time_format}"></span>
 </h1>
 </body>
 </html>
